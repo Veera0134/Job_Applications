@@ -1611,81 +1611,59 @@ function showNotification(message, type = 'success') {
     renderFileList();
   }
 
-  async function uploadOfferLetter() {
+async function uploadOfferLetter() {
     if (!fileInput.files[0]) {
-      showError('Please select a file to upload');
-      return;
+        showError('Please select a file to upload');
+        return;
     }
 
     try {
-      const response = await fetch(`${BASE_URL}/api/applications/${currentApplicationId}/files`);
-      const files = await response.json();
-      if (!response.ok) throw new Error(files.error || 'Failed to fetch existing files');
+        const formData = new FormData();
+        formData.append('files', fileInput.files[0]); // Must match server's multer field name
+        formData.append('applicationId', currentApplicationId);
 
-      if (files.length > 0) {
-        const confirmReplace = confirm(
-          'Uploading a new file will replace all existing files for this application. Do you want to continue?'
-        );
-        if (!confirmReplace) {
-          return;
+        console.log(`Uploading offer letter for application ID ${currentApplicationId}`);
+        uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+        uploadBtn.disabled = true;
+        
+        const uploadResponse = await fetch(`${BASE_URL}/api/applications/upload`, {
+            method: 'POST',
+            body: formData,
+            // Don't set Content-Type header - let the browser set it with boundary
+        });
+
+        if (!uploadResponse.ok) {
+            const errorData = await uploadResponse.json();
+            throw new Error(errorData.error || `HTTP ${uploadResponse.status}`);
         }
-        for (const file of files) {
-          const deleteResponse = await fetch(`${BASE_URL}/api/applications/files/${file.id}`, {
-            method: 'DELETE',
-          });
-          if (!deleteResponse.ok) {
-            const deleteError = await deleteResponse.json();
-            throw new Error(deleteError.error || 'Failed to delete existing file');
-          }
-        }
-      }
-
-      const formData = new FormData();
-      formData.append('files', fileInput.files[0]); // Use 'files' as the field name per server.js
-      formData.append('applicationId', currentApplicationId);
-
-      console.log(`Uploading offer letter for application ID ${currentApplicationId}`);
-      uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
-      uploadBtn.disabled = true;
-      const uploadResponse = await fetch(`${BASE_URL}/api/applications/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-      console.log('Upload offer letter response status:', uploadResponse.status, uploadResponse.statusText);
-      if (!uploadResponse.ok) {
-        const errorData = await uploadResponse.json();
-        throw new Error(errorData.error || `HTTP ${uploadResponse.status}`);
-      }
-      const result = await uploadResponse.json();
-      console.log('Upload offer letter response:', result);
-      showNotification('Offer letter uploaded successfully!');
-      selectedFiles = [];
-      fileList.innerHTML = '';
-      fileInput.value = '';
-      await fetchUploadedFiles(currentApplicationId);
-      fetchApplications(currentPage);
+        
+        const result = await uploadResponse.json();
+        console.log('Upload offer letter response:', result);
+        showNotification('Offer letter uploaded successfully!');
+        
+        // Reset form and refresh
+        selectedFiles = [];
+        fileList.innerHTML = '';
+        fileInput.value = '';
+        await fetchUploadedFiles(currentApplicationId);
+        fetchApplications(currentPage);
     } catch (error) {
-      console.error('Upload offer letter error:', error);
-      let errorMessage = error.message;
-      if (error.message.includes('LIMIT_FILE_SIZE')) {
-        errorMessage = 'File exceeds the 10MB limit';
-      } else if (error.message.includes('Only PDF, DOCX, JPG, JPEG, and PNG files are allowed')) {
-        errorMessage = 'Only PDF, DOCX, JPG, JPEG, and PNG files are allowed';
-      } else if (error.message.includes('Failed to fetch')) {
-        errorMessage = 'Unable to connect to the server. Please ensure the server is running.';
-      } else if (error.message.includes('CORS')) {
-        errorMessage = 'CORS error: Please ensure the server allows requests from this origin.';
-      } else if (error.message.includes('Application not found')) {
-        errorMessage = 'Application not found';
-      } else if (error.message.includes('Files can only be uploaded for accepted applications')) {
-        errorMessage = 'Files can only be uploaded for accepted applications';
-      }
-      showError(errorMessage);
+        console.error('Upload offer letter error:', error);
+        let errorMessage = error.message;
+        
+        // More specific error messages
+        if (error.message.includes('Failed to fetch')) {
+            errorMessage = 'Unable to connect to the server. Please ensure the server is running.';
+        } else if (error.message.includes('Files can only be uploaded for accepted applications')) {
+            errorMessage = 'Files can only be uploaded for accepted applications';
+        }
+        
+        showError(errorMessage);
     } finally {
-      uploadBtn.innerHTML = '<i class="fas fa-upload"></i> Upload Files';
-      uploadBtn.disabled = false;
+        uploadBtn.innerHTML = '<i class="fas fa-upload"></i> Upload Files';
+        uploadBtn.disabled = false;
     }
-  }
+}
 
   async function fetchUploadedFiles(applicationId) {
     try {
